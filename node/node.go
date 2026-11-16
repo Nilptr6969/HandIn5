@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"os"
 	pb "project-root/grpc"
 	"strconv"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,6 +20,7 @@ type NodePool struct {
 	logicalTime int32                   // the node's current time
 	connections map[int32]pb.NodeClient // the other nodes
 	mu          sync.Mutex
+	isLeader    bool
 }
 
 type ClientPool struct {
@@ -26,6 +29,51 @@ type ClientPool struct {
 	connections map[int32]pb.ClientClient // the other nodes
 	mu          sync.Mutex
 }
+
+func (p *NodePool) callElection() {
+	sentElections = 0
+	electionResponses = 0
+	biggerNode = false
+	for id, connection := range p.connections {
+		if id > p.nodeID {
+			sentElections++
+			go p.sendElection(connection)
+		}
+	}
+	for sentElections < electionResponses && !biggerNode {
+		//empty on purpose
+	}
+	if !biggerNode {
+		p.isLeader = true
+	}
+	ongoingElectionId++
+}
+
+func (p *NodePool) sendElection(connection pb.NodeClient) {
+	thisElectionId := ongoingElectionId
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := connection.Election(ctx, &pb.Election{Timestamp: p.logicalTime})
+	if ongoingElectionId != thisElectionId {
+		return
+	}
+	if err != nil {
+		p.mu.Lock()
+		electionResponses++
+		p.mu.Unlock()
+	} else {
+		p.mu.Lock()
+		biggerNode = true
+		p.mu.Unlock()
+	}
+	//make logical time correctly, not this
+	p.logicalTime = result.Timestamp
+}
+
+var sentElections int
+var electionResponses int
+var ongoingElectionId int
+var biggerNode bool
 
 func main() {
 	// Logging taken from https://last9.io/blog/write-logs-to-file/

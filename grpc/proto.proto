@@ -1,0 +1,47 @@
+syntax = "proto3";
+option go_package = "project-root/grpc/proto";
+
+message Bid {
+    int32 bid = 1;
+    int32 id = 2;
+    int32 timestamp = 3;
+}
+
+message Acknowledgement {
+    string outcome = 1;
+    int32 timestamp = 2;
+}
+
+message ResultRequest {
+    int32 timestamp = 1;
+}
+
+message ResultResponse {
+    bool isFinished = 1;
+    int32 highestBid = 2;
+    int32 winnerId = 3;
+    int32 timestamp = 4;
+}
+
+message Election {
+    int32 timestamp = 1;
+}
+
+message Status {
+    bool isDone = 1;
+    int32 highestBid = 2;
+    int32 winningId = 3;
+    repeated int32 clients = 4;
+    repeated int32 nodes = 5;
+    int32 timestamp = 6;
+}
+
+service Client {
+    rpc bid (Bid) returns (Acknowledgement);
+    rpc result (ResultRequest) returns (ResultResponse);
+}
+
+service Node {
+    rpc election (Election) returns (Election);
+    rpc write (Status) returns (Acknowledgement);
+}

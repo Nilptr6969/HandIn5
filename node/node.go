@@ -16,6 +16,33 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// All rpc calls and communication externally between the client and the server
+
+type ClientPool struct {
+	pb.UnimplementedClientServer
+	nodeID      int32                     // between 0-2
+	connections map[int32]pb.ClientClient // the other nodes
+	mu          sync.Mutex
+}
+
+// Called from a client
+func (p *ClientPool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	// TODO: check if this node is the leader. If no, make a call to the leader, if yes, make a write to all followers
+
+	// TODO: return acknowledgement to client
+	return nil, nil
+}
+
+// Called from a client
+func (p *ClientPool) Result(ctx context.Context, resultRequest *pb.ResultRequest) (*pb.ResultResponse, error) {
+	// TODO: Check if auction is over.
+
+	// TODO: return result to client
+	return nil, nil
+}
+
+// All rpc calls and communication internally between nodes.
+
 type NodePool struct {
 	pb.UnimplementedNodeServer
 	nodeID      int32                   // between 0-2
@@ -25,27 +52,8 @@ type NodePool struct {
 	isLeader    bool
 }
 
-type ClientPool struct {
-	pb.UnimplementedClientServer
-	nodeID      int32                     // between 0-2
-	connections map[int32]pb.ClientClient // the other nodes
-	mu          sync.Mutex
-}
-
-func (p *NodePool) NodeJoin(ctx context.Context, input *pb.Election) (*pb.Election, error) {
-	p.mu.Lock()
-	p.isLeader = false
-	p.LogicalTime(input.Timestamp)
-	log.Println(p.nodeID, "was told a node with a higher id joined at time", p.logicalTime)
-	p.mu.Unlock()
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.LogicalTime(0)
-	log.Println(p.nodeID, "returning timestamp to new node at time", p.logicalTime)
-	return &pb.Election{Timestamp: p.logicalTime}, nil
-}
-
+// Called from another node
+// Used when another node starts an election
 func (p *NodePool) Election(ctx context.Context, input *pb.Election) (*pb.Election, error) {
 	p.mu.Lock()
 	p.LogicalTime(input.Timestamp)
@@ -61,25 +69,42 @@ func (p *NodePool) Election(ctx context.Context, input *pb.Election) (*pb.Electi
 	return &pb.Election{Timestamp: p.logicalTime}, nil
 }
 
-func (p *NodePool) LogicalTime(otherTime int32) int32 {
-	p.RecievedLogicalTime(otherTime)
-	p.logicalTime++
+// Called from another node
+// Used when the leader is updating it's information
+func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledgement, error) {
+	// TODO: Update all variables in status
+	// Remember to lock the mutex
 
-	return p.logicalTime
+	// TODO: Send back acknowledgement
+	return nil, nil
 }
 
-func (p *NodePool) RecievedLogicalTime(time int32) {
-	if time > p.logicalTime {
-		p.logicalTime = time
-	}
+// Called from another node
+// Used when another node with a higher id has joined the node pool
+func (p *NodePool) NodeJoin(ctx context.Context, input *pb.Election) (*pb.Election, error) {
+	p.mu.Lock()
+	p.isLeader = false
+	p.LogicalTime(input.Timestamp)
+	log.Println(p.nodeID, "was told a node with a higher id joined at time", p.logicalTime)
+	p.mu.Unlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.LogicalTime(0)
+	log.Println(p.nodeID, "returning timestamp to new node at time", p.logicalTime)
+	return &pb.Election{Timestamp: p.logicalTime}, nil
 }
 
+// Internal functions for this node, used to contact other nodes
+
+// Called from this node
+// Used to contact nodes with lower id when this node joins the node pool
 func (p *NodePool) connectToNode(connection pb.NodeClient) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	p.mu.Lock()
 	p.LogicalTime(0)
-	log.Println(p.nodeID, "sent election request at time", p.logicalTime)
+	log.Println(p.nodeID, "sent connection request at time", p.logicalTime)
 	result, err := connection.NodeJoin(ctx, &pb.Election{Timestamp: p.logicalTime})
 	p.mu.Unlock()
 	if err == nil {
@@ -90,6 +115,8 @@ func (p *NodePool) connectToNode(connection pb.NodeClient) {
 	}
 }
 
+// Called from this node
+// Used when this node is created/restored
 func (p *NodePool) joinNodePool() {
 	for id, connection := range p.connections {
 		log.Println("looking at connection with id ", id)
@@ -103,6 +130,8 @@ func (p *NodePool) joinNodePool() {
 	}
 }
 
+// Called from this node
+// Used start an election when a new node has joined, the leader has died, or someone else called an election
 func (p *NodePool) callElection() {
 	tempLock.Lock()
 	sentElections = 0
@@ -127,8 +156,8 @@ func (p *NodePool) callElection() {
 	log.Println("sent election to all connections")
 	for sentElections > electionResponses && !biggerNodeExists {
 		log.Println("waiting for responses")
-		time.Sleep(100 * time.Millisecond)
-		//empty on purpose
+		time.Sleep(50 * time.Millisecond)
+		// used for waiting until other nodes respond
 	}
 	log.Println("enough responses received")
 	if !biggerNodeExists {
@@ -145,6 +174,8 @@ func (p *NodePool) callElection() {
 	log.Println("ongoingElectionId is", ongoingElectionId, "at time", p.logicalTime)
 }
 
+// Called from this node
+// Used to contact other nodes regarding the ongoing election
 func (p *NodePool) sendElection(connection pb.NodeClient) {
 	thisElectionId := ongoingElectionId
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -159,6 +190,7 @@ func (p *NodePool) sendElection(connection pb.NodeClient) {
 		return
 	}
 	if err != nil {
+		// TODO: if we stop hardcoding connections, remove the connection from the connection pool.
 		tempLock.Lock()
 		electionResponses++
 		tempLock.Unlock()
@@ -175,12 +207,29 @@ func (p *NodePool) sendElection(connection pb.NodeClient) {
 	fmt.Println(biggerNodeExists)
 }
 
+// Temporary variables used for elections
 var sentElections int
 var electionResponses int
 var ongoingElectionId int
 var biggerNodeExists bool
 var tempLock sync.Mutex
 
+// Logical time
+func (p *NodePool) LogicalTime(otherTime int32) int32 {
+	p.RecievedLogicalTime(otherTime)
+	p.logicalTime++
+
+	return p.logicalTime
+}
+
+// Logical time
+func (p *NodePool) RecievedLogicalTime(time int32) {
+	if time > p.logicalTime {
+		p.logicalTime = time
+	}
+}
+
+// Setup
 func main() {
 	// Logging taken from https://last9.io/blog/write-logs-to-file/
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -194,6 +243,7 @@ func main() {
 
 	id, _ := strconv.Atoi(os.Args[1])
 
+	// Setup for node server (the replicated servers)
 	nodePorts := []string{"50051", "50052", "50053"}
 	pool := &NodePool{nodeID: int32(id), logicalTime: 0, connections: make(map[int32]pb.NodeClient)}
 	server := grpc.NewServer()
@@ -215,6 +265,8 @@ func main() {
 	pool.joinNodePool()
 
 	pool.callElection()
+
+	// TODO: Set up client server
 
 	for {
 		fmt.Println("Enter message to leave")

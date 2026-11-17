@@ -161,6 +161,7 @@ var Client_ServiceDesc = grpc.ServiceDesc{
 const (
 	Node_Election_FullMethodName = "/Node/election"
 	Node_Write_FullMethodName    = "/Node/write"
+	Node_NodeJoin_FullMethodName = "/Node/nodeJoin"
 )
 
 // NodeClient is the client API for Node service.
@@ -169,6 +170,7 @@ const (
 type NodeClient interface {
 	Election(ctx context.Context, in *Election, opts ...grpc.CallOption) (*Election, error)
 	Write(ctx context.Context, in *Status, opts ...grpc.CallOption) (*Acknowledgement, error)
+	NodeJoin(ctx context.Context, in *Election, opts ...grpc.CallOption) (*Election, error)
 }
 
 type nodeClient struct {
@@ -199,12 +201,23 @@ func (c *nodeClient) Write(ctx context.Context, in *Status, opts ...grpc.CallOpt
 	return out, nil
 }
 
+func (c *nodeClient) NodeJoin(ctx context.Context, in *Election, opts ...grpc.CallOption) (*Election, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Election)
+	err := c.cc.Invoke(ctx, Node_NodeJoin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeServer is the server API for Node service.
 // All implementations must embed UnimplementedNodeServer
 // for forward compatibility.
 type NodeServer interface {
 	Election(context.Context, *Election) (*Election, error)
 	Write(context.Context, *Status) (*Acknowledgement, error)
+	NodeJoin(context.Context, *Election) (*Election, error)
 	mustEmbedUnimplementedNodeServer()
 }
 
@@ -220,6 +233,9 @@ func (UnimplementedNodeServer) Election(context.Context, *Election) (*Election, 
 }
 func (UnimplementedNodeServer) Write(context.Context, *Status) (*Acknowledgement, error) {
 	return nil, status.Error(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedNodeServer) NodeJoin(context.Context, *Election) (*Election, error) {
+	return nil, status.Error(codes.Unimplemented, "method NodeJoin not implemented")
 }
 func (UnimplementedNodeServer) mustEmbedUnimplementedNodeServer() {}
 func (UnimplementedNodeServer) testEmbeddedByValue()              {}
@@ -278,6 +294,24 @@ func _Node_Write_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Node_NodeJoin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Election)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServer).NodeJoin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Node_NodeJoin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServer).NodeJoin(ctx, req.(*Election))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Node_ServiceDesc is the grpc.ServiceDesc for Node service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -292,6 +326,10 @@ var Node_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "write",
 			Handler:    _Node_Write_Handler,
+		},
+		{
+			MethodName: "nodeJoin",
+			Handler:    _Node_NodeJoin_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

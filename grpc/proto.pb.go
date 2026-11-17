@@ -409,10 +409,11 @@ const file_proto_proto_rawDesc = "" +
 	"\ttimestamp\x18\x06 \x01(\x05R\ttimestamp2R\n" +
 	"\x06Client\x12\x1d\n" +
 	"\x03bid\x12\x04.Bid\x1a\x10.Acknowledgement\x12)\n" +
-	"\x06result\x12\x0e.ResultRequest\x1a\x0f.ResultResponse2L\n" +
+	"\x06result\x12\x0e.ResultRequest\x1a\x0f.ResultResponse2n\n" +
 	"\x04Node\x12 \n" +
 	"\belection\x12\t.Election\x1a\t.Election\x12\"\n" +
-	"\x05write\x12\a.Status\x1a\x10.AcknowledgementB\x19Z\x17project-root/grpc/protob\x06proto3"
+	"\x05write\x12\a.Status\x1a\x10.Acknowledgement\x12 \n" +
+	"\bnodeJoin\x12\t.Election\x1a\t.ElectionB\x19Z\x17project-root/grpc/protob\x06proto3"
 
 var (
 	file_proto_proto_rawDescOnce sync.Once
@@ -440,12 +441,14 @@ var file_proto_proto_depIdxs = []int32{
 	2, // 1: Client.result:input_type -> ResultRequest
 	4, // 2: Node.election:input_type -> Election
 	5, // 3: Node.write:input_type -> Status
-	1, // 4: Client.bid:output_type -> Acknowledgement
-	3, // 5: Client.result:output_type -> ResultResponse
-	4, // 6: Node.election:output_type -> Election
-	1, // 7: Node.write:output_type -> Acknowledgement
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
+	4, // 4: Node.nodeJoin:input_type -> Election
+	1, // 5: Client.bid:output_type -> Acknowledgement
+	3, // 6: Client.result:output_type -> ResultResponse
+	4, // 7: Node.election:output_type -> Election
+	1, // 8: Node.write:output_type -> Acknowledgement
+	4, // 9: Node.nodeJoin:output_type -> Election
+	5, // [5:10] is the sub-list for method output_type
+	0, // [0:5] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name

@@ -24,7 +24,7 @@ func main() {
 		clientServe := grpc.NewServer()
 	*/
 
-	nodeAddresses := []string{"50051", "50052", "50053"}
+	nodeAddresses := []string{"50061", "50062", "50063"}
 	connection, _ := grpc.NewClient("localhost:"+nodeAddresses[0], grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer connection.Close()
 

@@ -20,28 +20,36 @@ import (
 
 type ClientPool struct {
 	pb.UnimplementedClientServer
-	nodeID      int32                     // between 0-2
-	connections map[int32]pb.ClientClient // the other nodes
-	mu          sync.Mutex
+	p *NodePool
 }
 
 // Called from a client
-func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
-	if p.isLeader {
-		if bid.Bid > p.highestBid {
-			p.highestBid = bid.Bid
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			p.LogicalTime(bid.Timestamp)
-			return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: p.logicalTime}, nil
+func (c *ClientPool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	log.Println("Someone tried to bid")
+	if c.p.isLeader {
+		log.Println("The leader was asked for a bid")
+		if bid.Bid > c.p.highestBid {
+			log.Println("The bid was higher than the previous highest bid")
+			c.p.mu.Lock()
+			c.p.highestBid = bid.Bid
+			c.p.mu.Unlock()
+			log.Println("About to write to nodes")
+			c.p.WriteToNodes()
+			log.Println("Done writing to nodes")
+			c.p.mu.Lock()
+			defer c.p.mu.Unlock()
+			c.p.LogicalTime(bid.Timestamp)
+			log.Println("About to return acknowledgement")
+			defer log.Println("Should have returned acknowledgement")
+			return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: c.p.logicalTime}, nil
 		} else {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			p.LogicalTime(bid.Timestamp)
-			return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: p.logicalTime}, nil
+			c.p.mu.Lock()
+			defer c.p.mu.Unlock()
+			c.p.LogicalTime(bid.Timestamp)
+			return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: c.p.logicalTime}, nil
 		}
 	} else {
-		return p.connections[p.currentLeader].Bid(ctx, bid)
+		return c.p.connections[c.p.currentLeader].Bid(ctx, bid)
 	}
 }
 
@@ -64,7 +72,7 @@ type NodePool struct {
 	isLeader      bool
 	highestBid    int32
 	currentLeader int32
-	WinningId     int32
+	winningId     int32
 	isDone        bool
 }
 
@@ -88,11 +96,21 @@ func (p *NodePool) Election(ctx context.Context, input *pb.Election) (*pb.Electi
 // Called from another node
 // Used when the leader is updating it's information
 func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledgement, error) {
+	p.mu.Lock()
+	p.isDone = status.IsDone
+	p.highestBid = status.HighestBid
+	p.winningId = status.WinningId
+	p.currentLeader = status.CurrentLeader
+	p.LogicalTime(status.Timestamp)
+	p.mu.Unlock()
 	// TODO: Update all variables in status
 	// Remember to lock the mutex
 
 	// TODO: Send back acknowledgement
-	return nil, nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.LogicalTime(0)
+	return &pb.Acknowledgement{Timestamp: p.logicalTime}, nil
 }
 
 func (p *NodePool) WriteToNodes() {
@@ -119,7 +137,7 @@ func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	p.LogicalTime(0)
 	curLogicalTime := p.logicalTime
 	p.mu.Unlock()
-	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.WinningId, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
+	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.winningId, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
 	if err != nil {
 		delete(p.connections, id)
 		p.mu.Lock()
@@ -223,13 +241,15 @@ func (p *NodePool) callElection() {
 		p.isLeader = true
 		p.currentLeader = p.nodeID
 		p.mu.Unlock()
-
 	}
 	log.Println("isLeader variable is set to", p.isLeader, "at time", p.logicalTime)
 	tempLock.Lock()
 	ongoingElectionId++
 	tempLock.Unlock()
 	log.Println("ongoingElectionId is", ongoingElectionId, "at time", p.logicalTime)
+	if p.isLeader {
+		p.WriteToNodes()
+	}
 }
 
 // Called from this node
@@ -325,6 +345,14 @@ func main() {
 	pool.callElection()
 
 	// TODO: Set up client server
+	clientPool := &ClientPool{p: pool}
+	clientServer := grpc.NewServer()
+	pb.RegisterClientServer(clientServer, clientPool)
+	clientPorts := []string{"50061", "50062", "50063"}
+
+	clientListener, _ := net.Listen("tcp", "localhost:"+clientPorts[id])
+
+	go clientServer.Serve(clientListener)
 
 	//TODO: heartbeat, if leader does not respond to heartbeat, then leader is dead and new election
 

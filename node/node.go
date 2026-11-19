@@ -268,6 +268,8 @@ func main() {
 
 	// TODO: Set up client server
 
+	//TODO: heartbeat, if leader does not respond to heartbeat, then leader is dead and new election
+
 	for {
 		fmt.Println("Enter message to leave")
 		if bufio.NewScanner(os.Stdin).Scan() {

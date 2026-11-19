@@ -96,22 +96,43 @@ func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledg
 }
 
 func (p *NodePool) WriteToNodes() {
+	tempNodesLock.Lock()
+	tempNodesResponded = 0
+	tempNodesLock.Unlock()
+	amountOfConnections := len(p.connections)
 	for id, connection := range p.connections {
-		go p.WriteToNodesTheCoolOne(connection)
+		go p.WriteToNodesTheCoolOne(connection, id)
+	}
+
+	for tempNodesResponded < amountOfConnections {
+		// Do nothing, wait
 	}
 }
+
+var tempNodesResponded int
+var tempNodesLock sync.Mutex
 
 func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.LogicalTime(0)
-	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.WinningId, Timestamp: p.logicalTime, CurrentLeader: p.currentLeader})
-	if err != nil{
+	curLogicalTime := p.logicalTime
+	p.mu.Unlock()
+	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.WinningId, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
+	if err != nil {
 		delete(p.connections, id)
+		p.mu.Lock()
+		p.LogicalTime(0)
+		p.mu.Unlock()
+	} else {
+		p.mu.Lock()
+		p.LogicalTime(ack.Timestamp)
+		p.mu.Unlock()
 	}
-
+	tempNodesLock.Lock()
+	tempNodesResponded++
+	tempNodesLock.Unlock()
 }
 
 // Called from another node

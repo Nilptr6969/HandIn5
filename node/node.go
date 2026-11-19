@@ -26,11 +26,27 @@ type ClientPool struct {
 }
 
 // Called from a client
-func (p *ClientPool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	if p.isLeader {
+		if bid.Bid > p.highestBid {
+			p.highestBid = bid.Bid
+			return nil, nil
+		}
+	} else {
+		for id, connection := range p.connections {
+			if connection.IsLeader() {
+				return connection.Bid(ctx, bid)
+			}
+		}
+	}
 	// TODO: check if this node is the leader. If no, make a call to the leader, if yes, make a write to all followers
 
 	// TODO: return acknowledgement to client
 	return nil, nil
+}
+
+func (p *NodePool) IsLeader(ctx context.Context) bool {
+	return p.isLeader
 }
 
 // Called from a client
@@ -50,6 +66,7 @@ type NodePool struct {
 	connections map[int32]pb.NodeClient // the other nodes
 	mu          sync.Mutex
 	isLeader    bool
+	highestBid  int32
 }
 
 // Called from another node

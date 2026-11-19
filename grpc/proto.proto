@@ -42,6 +42,7 @@ service Client {
 }
 
 service Node {
+    rpc bid (Bid) returns (Acknowledgement);
     rpc election (Election) returns (Election);
     rpc write (Status) returns (Acknowledgement);
     rpc nodeJoin (Election) returns (Election);

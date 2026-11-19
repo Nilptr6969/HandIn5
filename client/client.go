@@ -1,9 +1,13 @@
 package main
 
 import (
-	"net"
+	"bufio"
+	"context"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 
 	pb "project-root/grpc"
 
@@ -12,18 +16,69 @@ import (
 )
 
 func main() {
-	clientID, _ := strconv.Atoi(os.Args[1])
-	clientPorts := []string{"50061", "50062", "50063"}
+	/*
+		clientID, _ := strconv.Atoi(os.Args[1])
+		clientPorts := []string{"50061", "50062", "50063"}
 
-	listener, _ := net.Listen("tcp", "localhost:"+clientPorts[clientID])
-	clientServe := grpc.NewServer()
+		listener, _ := net.Listen("tcp", "localhost:"+clientPorts[clientID])
+		clientServe := grpc.NewServer()
+	*/
 
-	leaderAddress := "50053"
-	connection, _ := grpc.NewClient("localhost:"+leaderAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	nodeAddresses := []string{"50051", "50052", "50053"}
+	connection, _ := grpc.NewClient("localhost:"+nodeAddresses[0], grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer connection.Close()
 
 	client := pb.NewClientClient(connection)
 
-	clientServe.Serve(listener)
+	scanner := bufio.NewScanner(os.Stdin)
 
+	for true {
+		scanner.Scan()
+		var cmd []string = strings.Split(scanner.Text(), " ")
+		if cmd[0] == ".e" || cmd[0] == ".exit" {
+			break
+		} else if strings.ToLower(cmd[0]) == "bid" {
+			// With timeout bullshit
+			ctx := context.Background()
+			bid, _ := strconv.Atoi(cmd[1])
+			mu.Lock()
+			LogicalTime(0)
+			bidAck, _ := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: logicalTime})
+			LogicalTime(bidAck.Timestamp)
+			mu.Unlock()
+			fmt.Println(bidAck.Outcome)
+		} else if strings.ToLower(cmd[0]) == "result" {
+			// With timeout bullshit
+			ctx := context.Background()
+			mu.Lock()
+			LogicalTime(0)
+			result, _ := client.Result(ctx, &pb.ResultRequest{Timestamp: logicalTime})
+			LogicalTime(result.Timestamp)
+			mu.Unlock()
+			if result.IsFinished {
+				fmt.Println("The winner is", result.WinnerId, "with a bid of", result.HighestBid)
+			} else {
+				fmt.Println("The current highest bid is:", result.HighestBid)
+			}
+		}
+
+	}
+}
+
+var logicalTime int32
+var mu sync.Mutex
+
+// Logical time
+func LogicalTime(otherTime int32) int32 {
+	RecievedLogicalTime(otherTime)
+	logicalTime++
+
+	return logicalTime
+}
+
+// Logical time
+func RecievedLogicalTime(time int32) {
+	if time > logicalTime {
+		logicalTime = time
+	}
 }

@@ -31,9 +31,8 @@ message Status {
     bool isDone = 1;
     int32 highestBid = 2;
     int32 winningId = 3;
-    repeated int32 clients = 4;
-    repeated int32 nodes = 5;
-    int32 timestamp = 6;
+    int32 timestamp = 4;
+    int32 currentLeader = 5;
 }
 
 service Client {

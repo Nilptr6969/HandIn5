@@ -294,9 +294,8 @@ type Status struct {
 	IsDone        bool                   `protobuf:"varint,1,opt,name=isDone,proto3" json:"isDone,omitempty"`
 	HighestBid    int32                  `protobuf:"varint,2,opt,name=highestBid,proto3" json:"highestBid,omitempty"`
 	WinningId     int32                  `protobuf:"varint,3,opt,name=winningId,proto3" json:"winningId,omitempty"`
-	Clients       []int32                `protobuf:"varint,4,rep,packed,name=clients,proto3" json:"clients,omitempty"`
-	Nodes         []int32                `protobuf:"varint,5,rep,packed,name=nodes,proto3" json:"nodes,omitempty"`
-	Timestamp     int32                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Timestamp     int32                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	CurrentLeader int32                  `protobuf:"varint,5,opt,name=currentLeader,proto3" json:"currentLeader,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -352,23 +351,16 @@ func (x *Status) GetWinningId() int32 {
 	return 0
 }
 
-func (x *Status) GetClients() []int32 {
-	if x != nil {
-		return x.Clients
-	}
-	return nil
-}
-
-func (x *Status) GetNodes() []int32 {
-	if x != nil {
-		return x.Nodes
-	}
-	return nil
-}
-
 func (x *Status) GetTimestamp() int32 {
 	if x != nil {
 		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *Status) GetCurrentLeader() int32 {
+	if x != nil {
+		return x.CurrentLeader
 	}
 	return 0
 }
@@ -397,16 +389,15 @@ const file_proto_proto_rawDesc = "" +
 	"\bwinnerId\x18\x03 \x01(\x05R\bwinnerId\x12\x1c\n" +
 	"\ttimestamp\x18\x04 \x01(\x05R\ttimestamp\"(\n" +
 	"\bElection\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\xac\x01\n" +
+	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\xa2\x01\n" +
 	"\x06Status\x12\x16\n" +
 	"\x06isDone\x18\x01 \x01(\bR\x06isDone\x12\x1e\n" +
 	"\n" +
 	"highestBid\x18\x02 \x01(\x05R\n" +
 	"highestBid\x12\x1c\n" +
-	"\twinningId\x18\x03 \x01(\x05R\twinningId\x12\x18\n" +
-	"\aclients\x18\x04 \x03(\x05R\aclients\x12\x14\n" +
-	"\x05nodes\x18\x05 \x03(\x05R\x05nodes\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\x05R\ttimestamp2R\n" +
+	"\twinningId\x18\x03 \x01(\x05R\twinningId\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x05R\ttimestamp\x12$\n" +
+	"\rcurrentLeader\x18\x05 \x01(\x05R\rcurrentLeader2R\n" +
 	"\x06Client\x12\x1d\n" +
 	"\x03bid\x12\x04.Bid\x1a\x10.Acknowledgement\x12)\n" +
 	"\x06result\x12\x0e.ResultRequest\x1a\x0f.ResultResponse2\x8d\x01\n" +

@@ -30,23 +30,19 @@ func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, e
 	if p.isLeader {
 		if bid.Bid > p.highestBid {
 			p.highestBid = bid.Bid
-			return nil, nil
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.LogicalTime(bid.Timestamp)
+			return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: p.logicalTime}, nil
+		} else {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.LogicalTime(bid.Timestamp)
+			return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: p.logicalTime}, nil
 		}
 	} else {
-		for id, connection := range p.connections {
-			if connection.IsLeader() {
-				return connection.Bid(ctx, bid)
-			}
-		}
+		return p.connections[p.currentLeader].Bid(ctx, bid)
 	}
-	// TODO: check if this node is the leader. If no, make a call to the leader, if yes, make a write to all followers
-
-	// TODO: return acknowledgement to client
-	return nil, nil
-}
-
-func (p *NodePool) IsLeader(ctx context.Context) bool {
-	return p.isLeader
 }
 
 // Called from a client
@@ -61,12 +57,15 @@ func (p *ClientPool) Result(ctx context.Context, resultRequest *pb.ResultRequest
 
 type NodePool struct {
 	pb.UnimplementedNodeServer
-	nodeID      int32                   // between 0-2
-	logicalTime int32                   // the node's current time
-	connections map[int32]pb.NodeClient // the other nodes
-	mu          sync.Mutex
-	isLeader    bool
-	highestBid  int32
+	nodeID        int32                   // between 0-2
+	logicalTime   int32                   // the node's current time
+	connections   map[int32]pb.NodeClient // the other nodes
+	mu            sync.Mutex
+	isLeader      bool
+	highestBid    int32
+	currentLeader int32
+	WinningId     int32
+	isDone        bool
 }
 
 // Called from another node
@@ -94,6 +93,25 @@ func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledg
 
 	// TODO: Send back acknowledgement
 	return nil, nil
+}
+
+func (p *NodePool) WriteToNodes() {
+	for id, connection := range p.connections {
+		go p.WriteToNodesTheCoolOne(connection)
+	}
+}
+
+func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.LogicalTime(0)
+	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.WinningId, Timestamp: p.logicalTime, CurrentLeader: p.currentLeader})
+	if err != nil{
+		delete(p.connections, id)
+	}
+
 }
 
 // Called from another node
@@ -182,7 +200,9 @@ func (p *NodePool) callElection() {
 		p.LogicalTime(p.logicalTime)
 		log.Println("I am the biggest node", p.nodeID, "at time", p.logicalTime)
 		p.isLeader = true
+		p.currentLeader = p.nodeID
 		p.mu.Unlock()
+
 	}
 	log.Println("isLeader variable is set to", p.isLeader, "at time", p.logicalTime)
 	tempLock.Lock()

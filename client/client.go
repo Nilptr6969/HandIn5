@@ -32,6 +32,7 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	fmt.Println("Ready")
 	for true {
 		scanner.Scan()
 		var cmd []string = strings.Split(scanner.Text(), " ")
@@ -43,7 +44,14 @@ func main() {
 			bid, _ := strconv.Atoi(cmd[1])
 			mu.Lock()
 			LogicalTime(0)
-			bidAck, _ := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: logicalTime})
+			curTime := logicalTime
+			mu.Unlock()
+			fmt.Println("About to bid")
+			bidAck, err := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: curTime})
+			if err != nil {
+				fmt.Println("Got en err")
+			}
+			mu.Lock()
 			LogicalTime(bidAck.Timestamp)
 			mu.Unlock()
 			fmt.Println(bidAck.Outcome)

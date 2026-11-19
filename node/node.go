@@ -18,43 +18,59 @@ import (
 
 // All rpc calls and communication externally between the client and the server
 
-type ClientPool struct {
-	pb.UnimplementedClientServer
-	p *NodePool
+// Called from a client
+func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	log.Println("Someone tried to bid")
+	if p.isLeader {
+		return p.LeaderBid(ctx, bid)
+	} else {
+		log.Println("Tried to call to leader")
+		log.Println("CurrentLeader is", p.currentLeader)
+		log.Println("Connections list is", p.connections)
+		curLead := p.connections[p.currentLeader]
+		log.Println("Found current leader")
+		log.Println("curLead is", curLead)
+		res, err := curLead.NodeBid(ctx, bid)
+		log.Println("Got a res")
+		if err != nil {
+			log.Println("Got an err")
+			log.Println(err.Error())
+		}
+		return res, err
+	}
 }
 
-// Called from a client
-func (c *ClientPool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
-	log.Println("Someone tried to bid")
-	if c.p.isLeader {
-		log.Println("The leader was asked for a bid")
-		if bid.Bid > c.p.highestBid {
-			log.Println("The bid was higher than the previous highest bid")
-			c.p.mu.Lock()
-			c.p.highestBid = bid.Bid
-			c.p.mu.Unlock()
-			log.Println("About to write to nodes")
-			c.p.WriteToNodes()
-			log.Println("Done writing to nodes")
-			c.p.mu.Lock()
-			defer c.p.mu.Unlock()
-			c.p.LogicalTime(bid.Timestamp)
-			log.Println("About to return acknowledgement")
-			defer log.Println("Should have returned acknowledgement")
-			return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: c.p.logicalTime}, nil
-		} else {
-			c.p.mu.Lock()
-			defer c.p.mu.Unlock()
-			c.p.LogicalTime(bid.Timestamp)
-			return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: c.p.logicalTime}, nil
-		}
+func (p *NodePool) NodeBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	log.Println("Node bid")
+	return p.LeaderBid(ctx, bid)
+}
+
+func (p *NodePool) LeaderBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
+	log.Println("The leader was asked for a bid")
+	if bid.Bid > p.highestBid {
+		log.Println("The bid was higher than the previous highest bid")
+		p.mu.Lock()
+		p.highestBid = bid.Bid
+		p.mu.Unlock()
+		log.Println("About to write to nodes")
+		p.WriteToNodes()
+		log.Println("Done writing to nodes")
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.LogicalTime(bid.Timestamp)
+		log.Println("About to return acknowledgement")
+		defer log.Println("Should have returned acknowledgement")
+		return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: p.logicalTime}, nil
 	} else {
-		return c.p.connections[c.p.currentLeader].Bid(ctx, bid)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.LogicalTime(bid.Timestamp)
+		return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: p.logicalTime}, nil
 	}
 }
 
 // Called from a client
-func (p *ClientPool) Result(ctx context.Context, resultRequest *pb.ResultRequest) (*pb.ResultResponse, error) {
+func (p *NodePool) Result(ctx context.Context, resultRequest *pb.ResultRequest) (*pb.ResultResponse, error) {
 	// TODO: Check if auction is over.
 
 	// TODO: return result to client
@@ -65,6 +81,7 @@ func (p *ClientPool) Result(ctx context.Context, resultRequest *pb.ResultRequest
 
 type NodePool struct {
 	pb.UnimplementedNodeServer
+	pb.UnimplementedClientServer
 	nodeID        int32                   // between 0-2
 	logicalTime   int32                   // the node's current time
 	connections   map[int32]pb.NodeClient // the other nodes
@@ -96,6 +113,7 @@ func (p *NodePool) Election(ctx context.Context, input *pb.Election) (*pb.Electi
 // Called from another node
 // Used when the leader is updating it's information
 func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledgement, error) {
+	fmt.Println("Someone wrote to me")
 	p.mu.Lock()
 	p.isDone = status.IsDone
 	p.highestBid = status.HighestBid
@@ -114,11 +132,14 @@ func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledg
 }
 
 func (p *NodePool) WriteToNodes() {
+	fmt.Println("I'm writing to others")
+	//time.Sleep(time.Second)
 	tempNodesLock.Lock()
 	tempNodesResponded = 0
 	tempNodesLock.Unlock()
 	amountOfConnections := len(p.connections)
 	for id, connection := range p.connections {
+		fmt.Println("I'm writing to", id)
 		go p.WriteToNodesTheCoolOne(connection, id)
 	}
 
@@ -131,6 +152,8 @@ var tempNodesResponded int
 var tempNodesLock sync.Mutex
 
 func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
+	fmt.Println("Cool write to", id)
+	log.Println("My", p.nodeID, "current leader is", p.currentLeader)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	p.mu.Lock()
@@ -139,8 +162,9 @@ func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	p.mu.Unlock()
 	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.winningId, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
 	if err != nil {
-		delete(p.connections, id)
+		fmt.Println(err.Error())
 		p.mu.Lock()
+		//delete(p.connections, id)
 		p.LogicalTime(0)
 		p.mu.Unlock()
 	} else {
@@ -195,7 +219,7 @@ func (p *NodePool) joinNodePool() {
 	for id, connection := range p.connections {
 		log.Println("looking at connection with id ", id)
 		if id < p.nodeID {
-			log.Println(id, "connection has bigger id")
+			log.Println(id, "connection has smaller id")
 			tempLock.Lock()
 			sentElections++
 			tempLock.Unlock()
@@ -207,6 +231,7 @@ func (p *NodePool) joinNodePool() {
 // Called from this node
 // Used start an election when a new node has joined, the leader has died, or someone else called an election
 func (p *NodePool) callElection() {
+	fmt.Println("connections is", p.connections)
 	tempLock.Lock()
 	sentElections = 0
 	electionResponses = 0
@@ -248,7 +273,7 @@ func (p *NodePool) callElection() {
 	tempLock.Unlock()
 	log.Println("ongoingElectionId is", ongoingElectionId, "at time", p.logicalTime)
 	if p.isLeader {
-		p.WriteToNodes()
+		go p.WriteToNodes()
 	}
 }
 
@@ -327,6 +352,14 @@ func main() {
 	server := grpc.NewServer()
 	pb.RegisterNodeServer(server, pool)
 
+	listener, _ := net.Listen("tcp", "localhost:"+nodePorts[id])
+
+	go server.Serve(listener)
+
+	//time.Sleep(time.Second)
+
+	fmt.Println("Listening on", "localhost:"+nodePorts[id])
+
 	for peerID, port := range nodePorts {
 		if peerID == id {
 			continue
@@ -336,18 +369,15 @@ func main() {
 		pool.connections[int32(peerID)] = pb.NewNodeClient(connection)
 	}
 
-	listener, _ := net.Listen("tcp", "localhost:"+nodePorts[id])
-
-	go server.Serve(listener)
-
 	pool.joinNodePool()
+
+	//time.Sleep(time.Second)
 
 	pool.callElection()
 
 	// TODO: Set up client server
-	clientPool := &ClientPool{p: pool}
 	clientServer := grpc.NewServer()
-	pb.RegisterClientServer(clientServer, clientPool)
+	pb.RegisterClientServer(clientServer, pool)
 	clientPorts := []string{"50061", "50062", "50063"}
 
 	clientListener, _ := net.Listen("tcp", "localhost:"+clientPorts[id])

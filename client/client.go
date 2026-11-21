@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	pb "project-root/grpc"
 
@@ -16,19 +17,12 @@ import (
 )
 
 func main() {
-	/*
-		clientID, _ := strconv.Atoi(os.Args[1])
-		clientPorts := []string{"50061", "50062", "50063"}
+	mu.Lock()
+	nodeAddresses = []string{"50061", "50062", "50063"}
+	NewConnection()
+	mu.Unlock()
 
-		listener, _ := net.Listen("tcp", "localhost:"+clientPorts[clientID])
-		clientServe := grpc.NewServer()
-	*/
-
-	nodeAddresses := []string{"50061", "50062", "50063"}
-	connection, _ := grpc.NewClient("localhost:"+nodeAddresses[0], grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer connection.Close()
-
-	client := pb.NewClientClient(connection)
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -39,22 +33,8 @@ func main() {
 		if cmd[0] == ".e" || cmd[0] == ".exit" {
 			break
 		} else if strings.ToLower(cmd[0]) == "bid" {
-			// With timeout bullshit
-			ctx := context.Background()
 			bid, _ := strconv.Atoi(cmd[1])
-			mu.Lock()
-			LogicalTime(0)
-			curTime := logicalTime
-			mu.Unlock()
-			fmt.Println("About to bid")
-			bidAck, err := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: curTime})
-			if err != nil {
-				fmt.Println("Got en err")
-			}
-			mu.Lock()
-			LogicalTime(bidAck.Timestamp)
-			mu.Unlock()
-			fmt.Println(bidAck.Outcome)
+			Bid(bid)
 		} else if strings.ToLower(cmd[0]) == "result" {
 			// With timeout bullshit
 			ctx := context.Background()
@@ -73,6 +53,46 @@ func main() {
 	}
 }
 
+func NewConnection() {
+	if connection != nil {
+		connection.Close()
+	}
+	time.Sleep(100 * time.Millisecond)
+	connection, _ = grpc.NewClient("localhost:"+nodeAddresses[len(nodeAddresses)-1], grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client = pb.NewClientClient(connection)
+}
+
+func Bid(bid int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Millisecond)
+	defer cancel()
+	mu.Lock()
+	LogicalTime(0)
+	curTime := logicalTime
+	mu.Unlock()
+	fmt.Println("About to bid")
+	bidAck, err := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: curTime})
+	if err != nil {
+		fmt.Println(err.Error())
+		if len(nodeAddresses) <= 1 {
+			fmt.Println("No nodes left")
+			return
+		}
+		mu.Lock()
+		nodeAddresses = nodeAddresses[:len(nodeAddresses)-1]
+		NewConnection()
+		mu.Unlock()
+		Bid(bid)
+	} else {
+		mu.Lock()
+		LogicalTime(bidAck.Timestamp)
+		mu.Unlock()
+		fmt.Println(bidAck.Outcome)
+	}
+}
+
+var nodeAddresses []string
+var connection *grpc.ClientConn
+var client pb.ClientClient
 var logicalTime int32
 var mu sync.Mutex
 

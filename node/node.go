@@ -25,7 +25,7 @@ func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, e
 		return p.LeaderBid(ctx, bid)
 	} else {
 		log.Println("Tried to call to leader")
-		log.Println("CurrentLeader is", p.currentLeader)
+		log.Println("Node", p.nodeID, "is speaking. CurrentLeader is", p.currentLeader)
 		log.Println("Connections list is", p.connections)
 		curLead := p.connections[p.currentLeader]
 		log.Println("Found current leader")
@@ -35,6 +35,14 @@ func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, e
 		if err != nil {
 			log.Println("Got an err")
 			log.Println(err.Error())
+			p.callElection()
+			if p.isLeader {
+				return p.LeaderBid(ctx, bid)
+			} else {
+				curLead := p.connections[p.currentLeader]
+				fmt.Println("CurLead is", curLead)
+				return curLead.NodeBid(ctx, bid)
+			}
 		}
 		return res, err
 	}
@@ -273,7 +281,7 @@ func (p *NodePool) callElection() {
 	tempLock.Unlock()
 	log.Println("ongoingElectionId is", ongoingElectionId, "at time", p.logicalTime)
 	if p.isLeader {
-		go p.WriteToNodes()
+		p.WriteToNodes()
 	}
 }
 

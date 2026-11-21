@@ -63,7 +63,7 @@ func NewConnection() {
 }
 
 func Bid(bid int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	mu.Lock()
 	LogicalTime(0)

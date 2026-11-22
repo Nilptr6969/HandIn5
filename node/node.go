@@ -79,10 +79,14 @@ func (p *NodePool) LeaderBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgem
 
 // Called from a client
 func (p *NodePool) Result(ctx context.Context, resultRequest *pb.ResultRequest) (*pb.ResultResponse, error) {
-	// TODO: Check if auction is over.
-
-	// TODO: return result to client
-	return nil, nil
+	if p.isDone {
+		return &pb.ResultResponse{
+			HighestBid: p.highestBid,
+			WinnerId:   p.winningId,
+		}, nil
+	} else {
+		return &pb.ResultResponse{HighestBid: p.highestBid}, nil
+	}
 }
 
 // All rpc calls and communication internally between nodes.

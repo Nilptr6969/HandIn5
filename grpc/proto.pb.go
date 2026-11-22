@@ -24,7 +24,7 @@ const (
 type Bid struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Bid           int32                  `protobuf:"varint,1,opt,name=bid,proto3" json:"bid,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Timestamp     int32                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -67,11 +67,11 @@ func (x *Bid) GetBid() int32 {
 	return 0
 }
 
-func (x *Bid) GetId() int32 {
+func (x *Bid) GetName() string {
 	if x != nil {
-		return x.Id
+		return x.Name
 	}
-	return 0
+	return ""
 }
 
 func (x *Bid) GetTimestamp() int32 {
@@ -181,7 +181,7 @@ type ResultResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsFinished    bool                   `protobuf:"varint,1,opt,name=isFinished,proto3" json:"isFinished,omitempty"`
 	HighestBid    int32                  `protobuf:"varint,2,opt,name=highestBid,proto3" json:"highestBid,omitempty"`
-	WinnerId      int32                  `protobuf:"varint,3,opt,name=winnerId,proto3" json:"winnerId,omitempty"`
+	WinnerName    string                 `protobuf:"bytes,3,opt,name=winnerName,proto3" json:"winnerName,omitempty"`
 	Timestamp     int32                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -231,11 +231,11 @@ func (x *ResultResponse) GetHighestBid() int32 {
 	return 0
 }
 
-func (x *ResultResponse) GetWinnerId() int32 {
+func (x *ResultResponse) GetWinnerName() string {
 	if x != nil {
-		return x.WinnerId
+		return x.WinnerName
 	}
-	return 0
+	return ""
 }
 
 func (x *ResultResponse) GetTimestamp() int32 {
@@ -293,7 +293,7 @@ type Status struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsDone        bool                   `protobuf:"varint,1,opt,name=isDone,proto3" json:"isDone,omitempty"`
 	HighestBid    int32                  `protobuf:"varint,2,opt,name=highestBid,proto3" json:"highestBid,omitempty"`
-	WinningId     int32                  `protobuf:"varint,3,opt,name=winningId,proto3" json:"winningId,omitempty"`
+	WinningName   string                 `protobuf:"bytes,3,opt,name=winningName,proto3" json:"winningName,omitempty"`
 	Timestamp     int32                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	CurrentLeader int32                  `protobuf:"varint,5,opt,name=currentLeader,proto3" json:"currentLeader,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -344,11 +344,11 @@ func (x *Status) GetHighestBid() int32 {
 	return 0
 }
 
-func (x *Status) GetWinningId() int32 {
+func (x *Status) GetWinningName() string {
 	if x != nil {
-		return x.WinningId
+		return x.WinningName
 	}
-	return 0
+	return ""
 }
 
 func (x *Status) GetTimestamp() int32 {
@@ -369,33 +369,35 @@ var File_proto_proto protoreflect.FileDescriptor
 
 const file_proto_proto_rawDesc = "" +
 	"\n" +
-	"\vproto.proto\"E\n" +
+	"\vproto.proto\"I\n" +
 	"\x03Bid\x12\x10\n" +
-	"\x03bid\x18\x01 \x01(\x05R\x03bid\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x1c\n" +
+	"\x03bid\x18\x01 \x01(\x05R\x03bid\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
 	"\ttimestamp\x18\x03 \x01(\x05R\ttimestamp\"I\n" +
 	"\x0fAcknowledgement\x12\x18\n" +
 	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x05R\ttimestamp\"-\n" +
 	"\rResultRequest\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\x8a\x01\n" +
+	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\x8e\x01\n" +
 	"\x0eResultResponse\x12\x1e\n" +
 	"\n" +
 	"isFinished\x18\x01 \x01(\bR\n" +
 	"isFinished\x12\x1e\n" +
 	"\n" +
 	"highestBid\x18\x02 \x01(\x05R\n" +
-	"highestBid\x12\x1a\n" +
-	"\bwinnerId\x18\x03 \x01(\x05R\bwinnerId\x12\x1c\n" +
+	"highestBid\x12\x1e\n" +
+	"\n" +
+	"winnerName\x18\x03 \x01(\tR\n" +
+	"winnerName\x12\x1c\n" +
 	"\ttimestamp\x18\x04 \x01(\x05R\ttimestamp\"(\n" +
 	"\bElection\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\xa2\x01\n" +
+	"\ttimestamp\x18\x01 \x01(\x05R\ttimestamp\"\xa6\x01\n" +
 	"\x06Status\x12\x16\n" +
 	"\x06isDone\x18\x01 \x01(\bR\x06isDone\x12\x1e\n" +
 	"\n" +
 	"highestBid\x18\x02 \x01(\x05R\n" +
-	"highestBid\x12\x1c\n" +
-	"\twinningId\x18\x03 \x01(\x05R\twinningId\x12\x1c\n" +
+	"highestBid\x12 \n" +
+	"\vwinningName\x18\x03 \x01(\tR\vwinningName\x12\x1c\n" +
 	"\ttimestamp\x18\x04 \x01(\x05R\ttimestamp\x12$\n" +
 	"\rcurrentLeader\x18\x05 \x01(\x05R\rcurrentLeader2R\n" +
 	"\x06Client\x12\x1d\n" +

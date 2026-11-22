@@ -3,7 +3,7 @@ option go_package = "project-root/grpc/proto";
 
 message Bid {
     int32 bid = 1;
-    int32 id = 2;
+    string name = 2;
     int32 timestamp = 3;
 }
 
@@ -19,7 +19,7 @@ message ResultRequest {
 message ResultResponse {
     bool isFinished = 1;
     int32 highestBid = 2;
-    int32 winnerId = 3;
+    string winnerName = 3;
     int32 timestamp = 4;
 }
 
@@ -30,7 +30,7 @@ message Election {
 message Status {
     bool isDone = 1;
     int32 highestBid = 2;
-    int32 winningId = 3;
+    string winningName = 3;
     int32 timestamp = 4;
     int32 currentLeader = 5;
 }

@@ -26,7 +26,11 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	fmt.Println("Ready")
+	fmt.Print("Enter a name: ")
+	scanner.Scan()
+	name = scanner.Text()
+
+	fmt.Println("Welcome,", name)
 	for true {
 		scanner.Scan()
 		var cmd []string = strings.Split(scanner.Text(), " ")
@@ -36,18 +40,9 @@ func main() {
 			bid, _ := strconv.Atoi(cmd[1])
 			Bid(bid)
 		} else if strings.ToLower(cmd[0]) == "result" {
-			// With timeout bullshit
-			ctx := context.Background()
-			mu.Lock()
-			LogicalTime(0)
-			result, _ := client.Result(ctx, &pb.ResultRequest{Timestamp: logicalTime})
-			LogicalTime(result.Timestamp)
-			mu.Unlock()
-			if result.IsFinished {
-				fmt.Println("The winner is", result.WinnerId, "with a bid of", result.HighestBid)
-			} else {
-				fmt.Println("The current highest bid is:", result.HighestBid)
-			}
+			Result()
+		} else {
+			fmt.Println("Please enter a valid command")
 		}
 
 	}
@@ -62,6 +57,38 @@ func NewConnection() {
 	client = pb.NewClientClient(connection)
 }
 
+func Result() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	mu.Lock()
+	LogicalTime(0)
+	curTime := logicalTime
+	mu.Unlock()
+	fmt.Println("Requesting result")
+	result, err := client.Result(ctx, &pb.ResultRequest{Timestamp: curTime})
+	if err != nil {
+		fmt.Println(err.Error())
+		if len(nodeAddresses) <= 1 {
+			fmt.Println("No nodes left")
+			return
+		}
+		mu.Lock()
+		nodeAddresses = nodeAddresses[:len(nodeAddresses)-1]
+		NewConnection()
+		mu.Unlock()
+		Result()
+	} else {
+		mu.Lock()
+		LogicalTime(result.Timestamp)
+		mu.Unlock()
+		if result.IsFinished {
+			fmt.Println("The winner is", result.WinnerName, "with a bid of", result.HighestBid)
+		} else {
+			fmt.Println("The current highest bid is:", result.HighestBid)
+		}
+	}
+}
+
 func Bid(bid int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -70,7 +97,7 @@ func Bid(bid int) {
 	curTime := logicalTime
 	mu.Unlock()
 	fmt.Println("About to bid")
-	bidAck, err := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Id: 1, Timestamp: curTime})
+	bidAck, err := client.Bid(ctx, &pb.Bid{Bid: int32(bid), Name: name, Timestamp: curTime})
 	if err != nil {
 		fmt.Println(err.Error())
 		if len(nodeAddresses) <= 1 {
@@ -94,6 +121,7 @@ var nodeAddresses []string
 var connection *grpc.ClientConn
 var client pb.ClientClient
 var logicalTime int32
+var name string
 var mu sync.Mutex
 
 // Logical time

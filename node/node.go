@@ -55,10 +55,17 @@ func (p *NodePool) NodeBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgemen
 
 func (p *NodePool) LeaderBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
 	log.Println("The leader was asked for a bid")
-	if bid.Bid > p.highestBid {
+	if p.isDone || p.logicalTime > 100 {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.LogicalTime(bid.Timestamp)
+		p.isDone = true
+		return &pb.Acknowledgement{Outcome: "bidding over", Timestamp: p.logicalTime}, nil
+	} else if bid.Bid > p.highestBid {
 		log.Println("The bid was higher than the previous highest bid")
 		p.mu.Lock()
 		p.highestBid = bid.Bid
+		p.winningName = bid.Name
 		p.mu.Unlock()
 		log.Println("About to write to nodes")
 		p.WriteToNodes()
@@ -82,7 +89,8 @@ func (p *NodePool) Result(ctx context.Context, resultRequest *pb.ResultRequest) 
 	if p.isDone {
 		return &pb.ResultResponse{
 			HighestBid: p.highestBid,
-			WinnerId:   p.winningId,
+			WinnerName: p.winningName,
+			IsFinished: true,
 		}, nil
 	} else {
 		return &pb.ResultResponse{HighestBid: p.highestBid}, nil
@@ -101,7 +109,7 @@ type NodePool struct {
 	isLeader      bool
 	highestBid    int32
 	currentLeader int32
-	winningId     int32
+	winningName   string
 	isDone        bool
 }
 
@@ -129,7 +137,7 @@ func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledg
 	p.mu.Lock()
 	p.isDone = status.IsDone
 	p.highestBid = status.HighestBid
-	p.winningId = status.WinningId
+	p.winningName = status.WinningName
 	p.currentLeader = status.CurrentLeader
 	p.LogicalTime(status.Timestamp)
 	p.mu.Unlock()
@@ -172,7 +180,7 @@ func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	p.LogicalTime(0)
 	curLogicalTime := p.logicalTime
 	p.mu.Unlock()
-	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningId: p.winningId, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
+	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningName: p.winningName, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
 	if err != nil {
 		fmt.Println(err.Error())
 		p.mu.Lock()

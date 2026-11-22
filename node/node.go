@@ -387,6 +387,8 @@ func main() {
 		pool.connections[int32(peerID)] = pb.NewNodeClient(connection)
 	}
 
+	log.Println("Node", id, "is set up internally")
+
 	pool.joinNodePool()
 
 	//time.Sleep(time.Second)
@@ -401,6 +403,8 @@ func main() {
 	clientListener, _ := net.Listen("tcp", "localhost:"+clientPorts[id])
 
 	go clientServer.Serve(clientListener)
+
+	log.Println("Node", id, "is set up for clients")
 
 	//TODO: heartbeat, if leader does not respond to heartbeat, then leader is dead and new election
 

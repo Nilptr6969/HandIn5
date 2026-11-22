@@ -24,23 +24,19 @@ func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, e
 	if p.isLeader {
 		return p.LeaderBid(ctx, bid)
 	} else {
-		log.Println("Tried to call to leader")
-		log.Println("Node", p.nodeID, "is speaking. CurrentLeader is", p.currentLeader)
-		log.Println("Connections list is", p.connections)
+		log.Println("Node", p.nodeID, "Tried to call to leader")
 		curLead := p.connections[p.currentLeader]
 		log.Println("Found current leader")
 		log.Println("curLead is", curLead)
+		log.Println("Node", p.nodeID, "is forwarding bid to leader")
 		res, err := curLead.NodeBid(ctx, bid)
-		log.Println("Got a res")
 		if err != nil {
-			log.Println("Got an err")
-			log.Println(err.Error())
+			log.Println("Node", p.nodeID, "got the following error: \"", err.Error(), "\"")
 			p.callElection()
 			if p.isLeader {
 				return p.LeaderBid(ctx, bid)
 			} else {
 				curLead := p.connections[p.currentLeader]
-				fmt.Println("CurLead is", curLead)
 				return curLead.NodeBid(ctx, bid)
 			}
 		}
@@ -48,17 +44,22 @@ func (p *NodePool) Bid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, e
 	}
 }
 
+// Called from another node
 func (p *NodePool) NodeBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
-	log.Println("Node bid")
+	log.Println("Node", p.nodeID, "recieved a forwarded bid")
 	return p.LeaderBid(ctx, bid)
 }
 
+// Called from this node
 func (p *NodePool) LeaderBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgement, error) {
 	log.Println("The leader was asked for a bid")
 	if p.isDone || p.logicalTime > 100 {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.LogicalTime(bid.Timestamp)
+		if !p.isDone {
+			log.Println("The bidding has just finished at time", p.logicalTime)
+		}
 		p.isDone = true
 		return &pb.Acknowledgement{Outcome: "bidding over", Timestamp: p.logicalTime}, nil
 	} else if bid.Bid > p.highestBid {
@@ -66,20 +67,20 @@ func (p *NodePool) LeaderBid(ctx context.Context, bid *pb.Bid) (*pb.Acknowledgem
 		p.mu.Lock()
 		p.highestBid = bid.Bid
 		p.winningName = bid.Name
+		log.Println("Node", p.nodeID, "about to write to nodes at time", p.logicalTime)
 		p.mu.Unlock()
-		log.Println("About to write to nodes")
 		p.WriteToNodes()
-		log.Println("Done writing to nodes")
 		p.mu.Lock()
+		log.Println("Node", p.nodeID, "done writing to nodes at time", p.logicalTime)
 		defer p.mu.Unlock()
 		p.LogicalTime(bid.Timestamp)
-		log.Println("About to return acknowledgement")
-		defer log.Println("Should have returned acknowledgement")
+		log.Println("Node", p.nodeID, "about to return acknowledgement at time", p.logicalTime)
 		return &pb.Acknowledgement{Outcome: "successful bid", Timestamp: p.logicalTime}, nil
 	} else {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.LogicalTime(bid.Timestamp)
+		log.Println("Node", p.nodeID, "about to return acknowledgement at time", p.logicalTime)
 		return &pb.Acknowledgement{Outcome: "unsuccessful bid", Timestamp: p.logicalTime}, nil
 	}
 }
@@ -133,47 +134,45 @@ func (p *NodePool) Election(ctx context.Context, input *pb.Election) (*pb.Electi
 // Called from another node
 // Used when the leader is updating it's information
 func (p *NodePool) Write(ctx context.Context, status *pb.Status) (*pb.Acknowledgement, error) {
-	fmt.Println("Someone wrote to me")
 	p.mu.Lock()
+	log.Println("Node", p.nodeID, "has recieved at write at time", p.logicalTime)
 	p.isDone = status.IsDone
 	p.highestBid = status.HighestBid
 	p.winningName = status.WinningName
 	p.currentLeader = status.CurrentLeader
 	p.LogicalTime(status.Timestamp)
 	p.mu.Unlock()
-	// TODO: Update all variables in status
-	// Remember to lock the mutex
 
-	// TODO: Send back acknowledgement
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.LogicalTime(0)
+	log.Println("Node", p.nodeID, "is sending acknowledgement of write at time", p.logicalTime)
 	return &pb.Acknowledgement{Timestamp: p.logicalTime}, nil
 }
 
+// Called from this node
 func (p *NodePool) WriteToNodes() {
-	fmt.Println("I'm writing to others")
 	//time.Sleep(time.Second)
 	tempNodesLock.Lock()
 	tempNodesResponded = 0
 	tempNodesLock.Unlock()
 	amountOfConnections := len(p.connections)
 	for id, connection := range p.connections {
-		fmt.Println("I'm writing to", id)
+		log.Println("Node", p.nodeID, "writing to node", id)
 		go p.WriteToNodesTheCoolOne(connection, id)
 	}
 
 	for tempNodesResponded < amountOfConnections {
 		// Do nothing, wait
+		time.Sleep(30 * time.Millisecond)
 	}
 }
 
 var tempNodesResponded int
 var tempNodesLock sync.Mutex
 
+// Called from this node
 func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
-	fmt.Println("Cool write to", id)
-	log.Println("My", p.nodeID, "current leader is", p.currentLeader)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	p.mu.Lock()
@@ -182,7 +181,7 @@ func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	p.mu.Unlock()
 	ack, err := connection.Write(ctx, &pb.Status{IsDone: p.isDone, HighestBid: p.highestBid, WinningName: p.winningName, Timestamp: curLogicalTime, CurrentLeader: p.currentLeader})
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println("Node", p.nodeID, "write request returned error: \"", err.Error(), "\"")
 		p.mu.Lock()
 		//delete(p.connections, id)
 		p.LogicalTime(0)
@@ -190,6 +189,7 @@ func (p *NodePool) WriteToNodesTheCoolOne(connection pb.NodeClient, id int32) {
 	} else {
 		p.mu.Lock()
 		p.LogicalTime(ack.Timestamp)
+		log.Println("Node", p.nodeID, "recieved acknowledgement of write from", id, "at time", p.logicalTime)
 		p.mu.Unlock()
 	}
 	tempNodesLock.Lock()
@@ -222,7 +222,7 @@ func (p *NodePool) connectToNode(connection pb.NodeClient) {
 	defer cancel()
 	p.mu.Lock()
 	p.LogicalTime(0)
-	log.Println(p.nodeID, "sent connection request at time", p.logicalTime)
+	log.Println("Node", p.nodeID, "sent connection request at time", p.logicalTime)
 	result, err := connection.NodeJoin(ctx, &pb.Election{Timestamp: p.logicalTime})
 	p.mu.Unlock()
 	if err == nil {
@@ -237,7 +237,7 @@ func (p *NodePool) connectToNode(connection pb.NodeClient) {
 // Used when this node is created/restored
 func (p *NodePool) joinNodePool() {
 	for id, connection := range p.connections {
-		log.Println("looking at connection with id ", id)
+		log.Println("Node", p.nodeID, "looking at connection with id ", id)
 		if id < p.nodeID {
 			log.Println(id, "connection has smaller id")
 			tempLock.Lock()
@@ -251,7 +251,6 @@ func (p *NodePool) joinNodePool() {
 // Called from this node
 // Used start an election when a new node has joined, the leader has died, or someone else called an election
 func (p *NodePool) callElection() {
-	fmt.Println("connections is", p.connections)
 	tempLock.Lock()
 	sentElections = 0
 	electionResponses = 0
@@ -263,7 +262,7 @@ func (p *NodePool) callElection() {
 	log.Println("starting ongoingElectionId is ", ongoingElectionId)
 	p.mu.Unlock()
 	for id, connection := range p.connections {
-		log.Println("looking at connection with id ", id)
+		log.Println("Node", p.nodeID, "looking at connection with id ", id)
 		if id > p.nodeID {
 			log.Println(id, "connection has bigger id")
 			tempLock.Lock()
@@ -272,27 +271,27 @@ func (p *NodePool) callElection() {
 			go p.sendElection(connection)
 		}
 	}
-	log.Println("sent election to all connections")
+	log.Println("Node", p.nodeID, "sent election to all connections")
 	for sentElections > electionResponses && !biggerNodeExists {
-		log.Println("waiting for responses")
 		time.Sleep(50 * time.Millisecond)
 		// used for waiting until other nodes respond
 	}
-	log.Println("enough responses received")
+	log.Println("Node", p.nodeID, "has recieved enough responses from the election")
 	if !biggerNodeExists {
 		p.mu.Lock()
 		p.LogicalTime(p.logicalTime)
-		log.Println("I am the biggest node", p.nodeID, "at time", p.logicalTime)
+		log.Println("Node", p.nodeID, "has become leader at time", p.logicalTime)
 		p.isLeader = true
 		p.currentLeader = p.nodeID
 		p.mu.Unlock()
 	}
-	log.Println("isLeader variable is set to", p.isLeader, "at time", p.logicalTime)
+	log.Println("Node", p.nodeID, "isLeader variable is set to", p.isLeader, "at time", p.logicalTime)
 	tempLock.Lock()
 	ongoingElectionId++
 	tempLock.Unlock()
 	log.Println("ongoingElectionId is", ongoingElectionId, "at time", p.logicalTime)
 	if p.isLeader {
+		log.Println("Node", p.nodeID, "is sending write to nodes after becoming leader at time", p.logicalTime)
 		p.WriteToNodes()
 	}
 }
@@ -327,7 +326,6 @@ func (p *NodePool) sendElection(connection pb.NodeClient) {
 		log.Println("larger node has responded to message from", p.nodeID, "at time", p.logicalTime)
 		p.mu.Unlock()
 	}
-	fmt.Println(biggerNodeExists)
 }
 
 // Temporary variables used for elections
